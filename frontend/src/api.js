@@ -1,12 +1,16 @@
 const BASE_URL = "http://localhost:5000/api";
 
 export const registerUser = async (data) => {
-  const res = await fetch(`${BASE_URL}/users/register`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data)
-  });
-  return res.text();
+  try {
+    const res = await fetch(`${BASE_URL}/users/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data)
+    });
+    return await res.text();
+  } catch (err) {
+    return "Network error: Unable to reach the server. Make sure the backend is running.";
+  }
 };
 
 export const loginUser = async (data) => {
@@ -29,31 +33,56 @@ export const getUsers = async () => {
 };
 
 export const resetPassword = async (data) => {
-  const res = await fetch(`${BASE_URL}/users/reset-password`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data)
-  });
-  return res.text();
+  try {
+    const res = await fetch(`${BASE_URL}/users/reset-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data)
+    });
+    return await res.text();
+  } catch (err) {
+    return "Network error: Unable to reach the server.";
+  }
 };
 
 export const registerAdmin = async (data) => {
-  const res = await fetch(`${BASE_URL}/users/register-admin`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data)
-  });
-  return res.text();
+  try {
+    const res = await fetch(`${BASE_URL}/users/register-admin`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data)
+    });
+    return await res.text();
+  } catch (err) {
+    return "Network error: Unable to reach the server.";
+  }
+};
+
+export const adminUpdateUser = async (id, data) => {
+  try {
+    const res = await fetch(`${BASE_URL}/dashboard/admin/beneficiaries/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data)
+    });
+    return await res.text();
+  } catch (err) {
+    return "Network error: Unable to reach the server.";
+  }
 };
 
 // ===== SHOPKEEPER API =====
 export const registerShopkeeper = async (data) => {
-  const res = await fetch(`${BASE_URL}/shopkeeper/register`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data)
-  });
-  return res.text();
+  try {
+    const res = await fetch(`${BASE_URL}/shopkeeper/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data)
+    });
+    return await res.text();
+  } catch (err) {
+    return "Network error: Unable to reach the server.";
+  }
 };
 
 export const loginShopkeeper = async (data) => {

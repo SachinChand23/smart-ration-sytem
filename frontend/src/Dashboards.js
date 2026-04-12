@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
-import { submitComplaint, getComplaints, getMyComplaints, updateComplaintStatus } from './api';
+import { submitComplaint, getComplaints, getMyComplaints, updateComplaintStatus, adminUpdateUser } from './api';
 
 const BASE = "http://localhost:5000/api/dashboard";
 
@@ -21,6 +21,9 @@ export function AdminDashboard({ onLogout }) {
   const [stockUpdate, setStockUpdate] = useState({ shop_id: '', rice: '', wheat: '' });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [complaints, setComplaints] = useState([]);
+  const [showEditUser, setShowEditUser] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
+  const [userFilter, setUserFilter] = useState('All');
 
   const loadDashboard = useCallback(() => {
     fetch(`${BASE}/admin`).then(r => r.json()).then(setData).catch(() => {});
@@ -51,6 +54,14 @@ export function AdminDashboard({ onLogout }) {
     if (!stockUpdate.shop_id) return alert('Enter shop ID');
     const res = await fetch(`${BASE}/admin/stock`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(stockUpdate) });
     if (res.ok) { alert('Stock updated!'); setShowUpdateStock(false); setStockUpdate({ shop_id: '', rice: '', wheat: '' }); loadDashboard(); if (page === 'stock') fetch(`${BASE}/admin/stock`).then(r => r.json()).then(setStockList); }
+  };
+
+  const handleEditUserSubmit = async () => {
+    const res = await adminUpdateUser(editingUser.id, editingUser);
+    alert(res);
+    setShowEditUser(false);
+    fetch(`${BASE}/admin/beneficiaries`).then(r => r.json()).then(setBeneficiaries);
+    loadDashboard();
   };
 
   if (!data) return (
@@ -281,31 +292,77 @@ export function AdminDashboard({ onLogout }) {
               </div>
               <div className="page-stats-inline">
                 <span className="inline-stat">👥 Total: <strong>{beneficiaries.length}</strong></span>
+                <select className="input-field" style={{marginLeft: '15px'}} value={userFilter} onChange={e => setUserFilter(e.target.value)}>
+                  <option value="All">All Categories</option>
+                  <option value="AAY">AAY</option>
+                  <option value="PHH">PHH</option>
+                  <option value="NPHH">NPHH</option>
+                </select>
               </div>
             </div>
             <div className="card">
               <table className="data-table">
                 <thead>
-                  <tr><th>ID</th><th>Name</th><th>Aadhaar</th><th>Ration Card</th><th>Category</th><th>Family</th><th>Mobile</th><th>City</th><th>Verified</th></tr>
+                  <tr><th>ID</th><th>Name</th><th>Aadhaar</th><th>Ration Card</th><th>Category</th><th>Family</th><th>Mobile</th><th>City</th><th>Verified</th><th>Action</th></tr>
                 </thead>
                 <tbody>
-                  {beneficiaries.map((u, i) => (
+                  {beneficiaries.filter(u => userFilter === 'All' || u.rationCardType === userFilter).map((u, i) => (
                     <tr key={i} className="table-row-animate" style={{animationDelay: `${i * 30}ms`}}>
                       <td><span className="id-badge">#{u.id}</span></td>
                       <td className="name-cell">{u.name}</td>
                       <td><code className="aadhaar-code">{u.aadhaar}</code></td>
                       <td>{u.ration_card_number}</td>
-                      <td><span className={`category-badge ${u.ration_category?.toLowerCase()}`}>{u.ration_category}</span></td>
+                      <td><span className={`category-badge ${u.rationCardType?.toLowerCase()}`}>{u.rationCardType}</span></td>
                       <td>{u.family_members}</td>
                       <td>{u.mobile_number}</td>
                       <td>{u.city}</td>
                       <td>{u.is_verified ? <span className="verified-badge">✅ Yes</span> : <span className="unverified-badge">❌ No</span>}</td>
+                      <td>
+                        <button className="action-btn" onClick={() => { setEditingUser(u); setShowEditUser(true); }} style={{padding: '4px 8px', fontSize: '12px'}}>Edit</button>
+                      </td>
                     </tr>
                   ))}
-                  {beneficiaries.length === 0 && <tr><td colSpan="9" className="empty-state">No beneficiaries found</td></tr>}
+                  {beneficiaries.length === 0 && <tr><td colSpan="10" className="empty-state">No beneficiaries found</td></tr>}
                 </tbody>
               </table>
             </div>
+
+            {/* Edit User Modal */}
+            {showEditUser && editingUser && (
+              <div className="modal-overlay">
+                <div className="modal-content animate-in">
+                  <h3>Edit Beneficiary</h3>
+                  <div className="form-group">
+                    <label>Name</label>
+                    <input className="input-field" value={editingUser.name || ''} onChange={e => setEditingUser({...editingUser, name: e.target.value})} />
+                  </div>
+                  <div className="form-group">
+                    <label>Aadhaar</label>
+                    <input className="input-field" value={editingUser.aadhaar || ''} onChange={e => setEditingUser({...editingUser, aadhaar: e.target.value})} />
+                  </div>
+                  <div className="form-group">
+                    <label>Ration Card No</label>
+                    <input className="input-field" value={editingUser.ration_card_number || ''} onChange={e => setEditingUser({...editingUser, ration_card_number: e.target.value})} />
+                  </div>
+                  <div className="form-group">
+                    <label>Card Type</label>
+                    <select className="input-field" value={editingUser.rationCardType || ''} onChange={e => setEditingUser({...editingUser, rationCardType: e.target.value})}>
+                      <option value="AAY">AAY</option>
+                      <option value="PHH">PHH</option>
+                      <option value="NPHH">NPHH</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label>Family Members</label>
+                    <input type="number" className="input-field" value={editingUser.family_members || ''} onChange={e => setEditingUser({...editingUser, family_members: e.target.value})} />
+                  </div>
+                  <div className="modal-actions">
+                    <button className="btn outline" onClick={() => setShowEditUser(false)}>Cancel</button>
+                    <button className="btn primary" onClick={handleEditUserSubmit}>Save Changes</button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -787,11 +844,11 @@ export function ShopkeeperDashboard({ user, onLogout, shopId = 1, isAssistedMode
                       <h4>{userResult.name}</h4>
                       <p>Aadhaar: {userResult.aadhaar} • Ration Card: {userResult.ration_card_number}</p>
                     </div>
-                    <span className={`category-badge ${userResult.ration_category?.toLowerCase()}`}>{userResult.ration_category}</span>
+                    <span className={`category-badge ${userResult.rationCardType?.toLowerCase()}`}>{userResult.rationCardType}</span>
                   </div>
                   <div className="user-result-details">
                     <div className="detail-item"><span className="detail-label">Family Members</span><span className="detail-value">{userResult.family_members}</span></div>
-                    <div className="detail-item"><span className="detail-label">Category</span><span className="detail-value">{userResult.ration_category}</span></div>
+                    <div className="detail-item"><span className="detail-label">Card Type</span><span className="detail-value">{userResult.rationCardType}</span></div>
                     <div className="detail-item"><span className="detail-label">Aadhaar</span><span className="detail-value"><code className="aadhaar-code">{userResult.aadhaar}</code></span></div>
                   </div>
                   <div className="distribute-form">
@@ -1043,8 +1100,8 @@ export function UserDashboard({ user, onLogout }) {
                        <span style={{fontWeight:'600'}}>{data.user.ration_card_number}</span>
                      </div>
                      <div style={{display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #e2e8f0', paddingBottom: '8px'}}>
-                       <span style={{color:'#64748b'}}>Category</span>
-                       <span style={{fontWeight:'600'}}><span className={`category-badge ${data.user.category?.toLowerCase()}`}>{data.user.category}</span></span>
+                       <span style={{color:'#64748b'}}>Card Type</span>
+                       <span style={{fontWeight:'600'}}><span className={`category-badge ${data.user.rationCardType?.toLowerCase()}`}>{data.user.rationCardType}</span></span>
                      </div>
                      <div style={{display: 'flex', justifyContent: 'space-between'}}>
                        <span style={{color:'#64748b'}}>Family Size</span>

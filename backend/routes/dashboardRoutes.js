@@ -12,12 +12,14 @@ const {
   getShopkeeperDashboard,
   getUserDashboard,
   searchUserByAadhaar,
-  distributeRation
+  distributeRation,
+  adminUpdateUser
 } = require('../controllers/dashboardController');
 
 // Admin
 router.get('/admin', getAdminDashboard);
 router.get('/admin/beneficiaries', getAllBeneficiaries);
+router.put('/admin/beneficiaries/:id', adminUpdateUser);
 router.get('/admin/shops', getAllShops);
 router.post('/admin/shops', addShop);
 router.get('/admin/stock', getAllStock);

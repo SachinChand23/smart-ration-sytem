@@ -4,7 +4,7 @@ const jwt = require('jsonwebtoken');
 
 // REGISTER
 exports.registerUser = async (req, res) => {
-  const { name, aadhaar, ration_card_number, password, ration_category, family_members, mobile_number, city } = req.body;
+  const { name, aadhaar, ration_card_number, password, rationCardType, family_members, mobile_number, city } = req.body;
 
   // Validate Aadhaar (must be 12 digits)
   if (!aadhaar || aadhaar.length !== 12 || !/^\d+$/.test(aadhaar)) {
@@ -20,12 +20,15 @@ exports.registerUser = async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
     const role = "user"; // Default role
 
-    const query = `INSERT INTO users (name, aadhaar, password, role, ration_card_number, ration_category, family_members, mobile_number, city)
+    const query = `INSERT INTO users (name, aadhaar, password, role, ration_card_number, rationCardType, family_members, mobile_number, city)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
-    db.query(query, [name, aadhaar, hashedPassword, role, ration_card_number, ration_category, family_members, mobile_number, city], (err, result) => {
+    db.query(query, [name, aadhaar, hashedPassword, role, ration_card_number, rationCardType, family_members, mobile_number, city], (err, result) => {
       if (err) {
         if (err.code === 'ER_DUP_ENTRY') {
+          if (err.sqlMessage && err.sqlMessage.includes('ration_card_number')) {
+            return res.status(400).send("Ration Card Number is already registered.");
+          }
           return res.status(400).send("Aadhaar is already registered.");
         }
         return res.status(500).send(err);
@@ -92,7 +95,7 @@ exports.loginUser = (req, res) => {
       return res.status(401).json({ message: "Invalid password" });
     }
 
-    const token = jwt.sign({ id: user.id, role: user.role, name: user.name, aadhaar: user.aadhaar, ration_category: user.ration_category, shop_id: user.shop_id }, "secret123", {
+    const token = jwt.sign({ id: user.id, role: user.role, name: user.name, aadhaar: user.aadhaar, rationCardType: user.rationCardType, shop_id: user.shop_id }, "secret123", {
       expiresIn: "1h"
     });
 

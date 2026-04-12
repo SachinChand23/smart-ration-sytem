@@ -23,6 +23,11 @@ exports.getAdminDashboard = async (req, res) => {
     // Recent distributions
     const recentTx = await query("SELECT t.id, u.name as beneficiaryName, u.aadhaar, sh.name as shopName, t.date, t.rice, t.wheat FROM transactions t LEFT JOIN users u ON t.user_id = u.id LEFT JOIN shops sh ON t.shop_id = sh.id ORDER BY t.date DESC LIMIT 10");
 
+    // Breakdown by category
+    const [aayCount] = await query("SELECT COUNT(*) as count FROM users WHERE role = 'user' AND rationCardType = 'AAY'");
+    const [phhCount] = await query("SELECT COUNT(*) as count FROM users WHERE role = 'user' AND rationCardType = 'PHH'");
+    const [nphhCount] = await query("SELECT COUNT(*) as count FROM users WHERE role = 'user' AND rationCardType = 'NPHH'");
+
     res.json({
       beneficiaryCount: userRows.count,
       shopCount: shopRows.count,
@@ -32,7 +37,8 @@ exports.getAdminDashboard = async (req, res) => {
       totalTransactions: txRows.count,
       distributedStock: distRows.distributed,
       lowStockAlerts: lowStockShops.length,
-      recentDistributions: recentTx
+      recentDistributions: recentTx,
+      categoryStats: { aay: aayCount.count, phh: phhCount.count, nphh: nphhCount.count }
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -42,8 +48,21 @@ exports.getAdminDashboard = async (req, res) => {
 // GET ALL BENEFICIARIES
 exports.getAllBeneficiaries = async (req, res) => {
   try {
-    const users = await query("SELECT id, name, aadhaar, ration_card_number, ration_category, family_members, mobile_number, city, is_verified FROM users WHERE role = 'user'");
+    const users = await query("SELECT id, name, aadhaar, ration_card_number, rationCardType, family_members, mobile_number, city, is_verified FROM users WHERE role = 'user'");
     res.json(users);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// UPDATE USER (ADMIN)
+exports.adminUpdateUser = async (req, res) => {
+  const { id } = req.params;
+  const { name, aadhaar, ration_card_number, rationCardType, family_members, mobile_number, city } = req.body;
+  try {
+    await query("UPDATE users SET name=?, aadhaar=?, ration_card_number=?, rationCardType=?, family_members=?, mobile_number=?, city=? WHERE id=? AND role='user'",
+      [name, aadhaar, ration_card_number, rationCardType, family_members, mobile_number, city, id]);
+    res.json({ message: "User updated successfully" });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -124,16 +143,18 @@ exports.getUserDashboard = async (req, res) => {
     if (!user) return res.status(404).send("User not found");
 
     let entitlement = { rice: 0, wheat: 0 };
-    if (user.ration_category === 'AAY') {
+    if (user.rationCardType === 'AAY') {
       entitlement = { rice: 35, wheat: 0 };
-    } else if (user.ration_category === 'PHH') {
+    } else if (user.rationCardType === 'PHH') {
       entitlement = { rice: 5 * (user.family_members || 1), wheat: 2 * (user.family_members || 1) };
+    } else if (user.rationCardType === 'NPHH') {
+      entitlement = { rice: 0, wheat: 0 };
     }
 
     const txHistory = await query("SELECT t.*, s.name as shopName FROM transactions t LEFT JOIN shops s ON t.shop_id = s.id WHERE user_id = ? ORDER BY date DESC", [user_id]);
 
     res.json({
-      user: { name: user.name, aadhaar: user.aadhaar, ration_card_number: user.ration_card_number, category: user.ration_category, family_members: user.family_members },
+      user: { name: user.name, aadhaar: user.aadhaar, ration_card_number: user.ration_card_number, rationCardType: user.rationCardType, family_members: user.family_members },
       entitlement,
       transactionHistory: txHistory
     });
@@ -148,9 +169,9 @@ exports.searchUserByAadhaar = async (req, res) => {
   try {
     let rows;
     if (aadhaar) {
-      rows = await query("SELECT id, name, aadhaar, ration_card_number, ration_category, family_members FROM users WHERE aadhaar = ?", [aadhaar]);
+      rows = await query("SELECT id, name, aadhaar, ration_card_number, rationCardType, family_members FROM users WHERE aadhaar = ?", [aadhaar]);
     } else if (ration_card) {
-      rows = await query("SELECT id, name, aadhaar, ration_card_number, ration_category, family_members FROM users WHERE ration_card_number = ?", [ration_card]);
+      rows = await query("SELECT id, name, aadhaar, ration_card_number, rationCardType, family_members FROM users WHERE ration_card_number = ?", [ration_card]);
     } else {
       return res.status(400).send("Provide aadhaar or ration_card");
     }

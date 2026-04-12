@@ -8,7 +8,7 @@ function App() {
     aadhaar: "",
     ration_card_number: "",
     password: "",
-    ration_category: "AAY",
+    rationCardType: "AAY",
     family_members: "",
     mobile_number: "",
     city: "",
@@ -362,9 +362,10 @@ function App() {
             </div>
 
             <div style={{ display: 'flex', gap: '10px' }}>
-              <select name="ration_category" className="input-field" onChange={handleChange}>
+              <select name="rationCardType" className="input-field" onChange={handleChange}>
                 <option value="AAY">AAY (Antyodaya Anna Yojana)</option>
                 <option value="PHH">PHH (Priority Household)</option>
+                <option value="NPHH">NPHH (Non-Priority / APL)</option>
               </select>
               <input name="family_members" type="number" className="input-field" placeholder="Family Size" onChange={handleChange} style={{ width: '130px' }} />
             </div>

@@ -9,7 +9,7 @@ CREATE TABLE users (
   role ENUM('user','shopkeeper','admin') DEFAULT 'user',
   is_verified BOOLEAN DEFAULT true,
   ration_card_number VARCHAR(50),
-  ration_category ENUM('AAY', 'PHH'),
+  rationCardType ENUM('AAY', 'PHH', 'NPHH'),
   family_members INT,
   mobile_number VARCHAR(15),
   city VARCHAR(100)
