@@ -1,13 +1,13 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
-import { submitComplaint, getComplaints, getMyComplaints, updateComplaintStatus, adminUpdateUser } from './api';
+import { submitComplaint, getComplaints, getMyComplaints, updateComplaintStatus, adminUpdateUser, verifyUser, unverifyUser } from './api';
 
 const BASE = "http://localhost:5000/api/dashboard";
 
 /* ========================================
    ADMIN DASHBOARD – Full Featured
    ======================================== */
-export function AdminDashboard({ onLogout }) {
+export function AdminDashboard({ user, onLogout }) {
   const [page, setPage] = useState('dashboard');
   const [data, setData] = useState(null);
   const [beneficiaries, setBeneficiaries] = useState([]);
@@ -64,6 +64,21 @@ export function AdminDashboard({ onLogout }) {
     loadDashboard();
   };
 
+  const handleVerifyUser = async (id) => {
+    const res = await verifyUser(id);
+    alert(res);
+    fetch(`${BASE}/admin/beneficiaries`).then(r => r.json()).then(setBeneficiaries);
+    loadDashboard();
+  };
+
+  const handleUnverifyUser = async (id) => {
+    if (!window.confirm('Revoke verification for this user?')) return;
+    const res = await unverifyUser(id);
+    alert(res);
+    fetch(`${BASE}/admin/beneficiaries`).then(r => r.json()).then(setBeneficiaries);
+    loadDashboard();
+  };
+
   if (!data) return (
     <div className="loading-screen">
       <div className="loading-spinner"></div>
@@ -108,10 +123,10 @@ export function AdminDashboard({ onLogout }) {
           </div>
           <div className="notification-bell">🔔<span className="notif-dot"></span></div>
           <div className="admin-info">
-            <div className="admin-avatar">A</div>
+            <div className="admin-avatar">RO</div>
             <div className="admin-name-block">
-              <span className="admin-name">Administrator</span>
-              <span className="admin-role">Super Admin</span>
+              <span className="admin-name">Rationing Officer</span>
+              <span className="admin-role">Admin Panel</span>
             </div>
           </div>
           <button className="logout-top-btn" onClick={onLogout}>⏻ Logout</button>
@@ -122,12 +137,15 @@ export function AdminDashboard({ onLogout }) {
       <div className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
         <div className="sidebar-profile">
           <div className="avatar">
-            <span>👤</span>
+            <span>🏛️</span>
           </div>
           {!sidebarCollapsed && (
             <>
-              <p className="welcome-text">Welcome Admin</p>
+              <p className="welcome-text">Welcome Rationing Officer</p>
               <span className="email-text">admin@rationportal.gov.in</span>
+              <span className="email-text" style={{fontSize: '11px', marginTop: '4px', opacity: 0.75}}>
+                📍 Area: {user?.area || 'Bhandup, Mumbai'}
+              </span>
             </>
           )}
         </div>
@@ -303,7 +321,7 @@ export function AdminDashboard({ onLogout }) {
             <div className="card">
               <table className="data-table">
                 <thead>
-                  <tr><th>ID</th><th>Name</th><th>Aadhaar</th><th>Ration Card</th><th>Category</th><th>Family</th><th>Mobile</th><th>City</th><th>Verified</th><th>Action</th></tr>
+                  <tr><th>ID</th><th>Name</th><th>Aadhaar</th><th>Ration Card</th><th>Category</th><th>Family</th><th>Mobile</th><th>Area</th><th>Shop</th><th>Verified</th><th>Action</th></tr>
                 </thead>
                 <tbody>
                   {beneficiaries.filter(u => userFilter === 'All' || u.rationCardType === userFilter).map((u, i) => (
@@ -315,10 +333,18 @@ export function AdminDashboard({ onLogout }) {
                       <td><span className={`category-badge ${u.rationCardType?.toLowerCase()}`}>{u.rationCardType}</span></td>
                       <td>{u.family_members}</td>
                       <td>{u.mobile_number}</td>
-                      <td>{u.city}</td>
-                      <td>{u.is_verified ? <span className="verified-badge">✅ Yes</span> : <span className="unverified-badge">❌ No</span>}</td>
+                      <td>{u.area || '—'}</td>
+                      <td>{u.shop_id ? `#${u.shop_id}` : '—'}</td>
                       <td>
+                        {u.is_verified
+                          ? <span className="verified-badge">✅ Verified</span>
+                          : <span className="unverified-badge" style={{background:'#fef3c7',color:'#b45309',padding:'3px 8px',borderRadius:'12px',fontSize:'12px',fontWeight:600}}>⏳ Pending</span>}
+                      </td>
+                      <td style={{display:'flex',gap:'6px',flexWrap:'wrap'}}>
                         <button className="action-btn" onClick={() => { setEditingUser(u); setShowEditUser(true); }} style={{padding: '4px 8px', fontSize: '12px'}}>Edit</button>
+                        {!u.is_verified
+                          ? <button className="action-btn" onClick={() => handleVerifyUser(u.id)} style={{padding:'4px 8px',fontSize:'12px',background:'#10b981',color:'#fff',border:'none',borderRadius:'6px',cursor:'pointer'}}>✅ Verify</button>
+                          : <button className="action-btn" onClick={() => handleUnverifyUser(u.id)} style={{padding:'4px 8px',fontSize:'12px',background:'#ef4444',color:'#fff',border:'none',borderRadius:'6px',cursor:'pointer'}}>🚫 Revoke</button>}
                       </td>
                     </tr>
                   ))}
@@ -355,6 +381,14 @@ export function AdminDashboard({ onLogout }) {
                   <div className="form-group">
                     <label>Family Members</label>
                     <input type="number" className="input-field" value={editingUser.family_members || ''} onChange={e => setEditingUser({...editingUser, family_members: e.target.value})} />
+                  </div>
+                  <div className="form-group">
+                    <label>Area</label>
+                    <input className="input-field" value={editingUser.area || ''} onChange={e => setEditingUser({...editingUser, area: e.target.value})} />
+                  </div>
+                  <div className="form-group">
+                    <label>Assigned Shop ID</label>
+                    <input type="number" className="input-field" value={editingUser.shop_id || ''} onChange={e => setEditingUser({...editingUser, shop_id: e.target.value})} />
                   </div>
                   <div className="modal-actions">
                     <button className="btn outline" onClick={() => setShowEditUser(false)}>Cancel</button>
@@ -960,13 +994,24 @@ export function UserDashboard({ user, onLogout }) {
   const [compForm, setCompForm] = useState({ title: '', description: '' });
   const [activeTab, setActiveTab] = useState('overview');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [lastRefreshed, setLastRefreshed] = useState(new Date());
 
-  useEffect(() => {
+  const loadData = useCallback(() => {
     if (user?.id) {
-      fetch(`${BASE}/user/${user.id}`).then(r => r.json()).then(setData);
+      fetch(`${BASE}/user/${user.id}`).then(r => r.json()).then(d => {
+        setData(d);
+        setLastRefreshed(new Date());
+      });
       getMyComplaints(user.id).then(setMyComplaints);
     }
   }, [user]);
+
+  useEffect(() => {
+    loadData();
+    // Auto-refresh every 30 seconds to catch any new distributions
+    const interval = setInterval(loadData, 30000);
+    return () => clearInterval(interval);
+  }, [loadData]);
 
   const handleComplaintSubmit = async () => {
     if (!compForm.title || !compForm.description) return alert("Fill all fields");
@@ -1012,6 +1057,12 @@ export function UserDashboard({ user, onLogout }) {
           <span className="header-badge" style={{background: 'rgba(253, 224, 71, 0.2)', color: '#fde047'}}>User Panel</span>
         </div>
         <div className="top-header-right">
+          <button onClick={loadData} title="Refresh" style={{background:'rgba(255,255,255,0.1)',border:'none',color:'#fff',padding:'6px 12px',borderRadius:'8px',cursor:'pointer',fontSize:'13px',marginRight:'8px'}}>
+            🔄 Refresh
+          </button>
+          <span style={{color:'rgba(255,255,255,0.4)',fontSize:'11px',marginRight:'12px'}}>
+            Updated {lastRefreshed.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}
+          </span>
           <div className="notification-bell">🔔<span className="notif-dot"></span></div>
           <div className="admin-info">
             <div className="admin-avatar">{data.user.name?.charAt(0)?.toUpperCase()}</div>
@@ -1065,6 +1116,36 @@ export function UserDashboard({ user, onLogout }) {
                 <p>Welcome to your Smart Ration Portal</p>
               </div>
 
+              {/* Last Distribution Banner */}
+              {data.transactionHistory.length > 0 && (() => {
+                const last = data.transactionHistory[0];
+                return (
+                  <div className="card animate-in" style={{animationDelay:'40ms', background:'linear-gradient(135deg,#064e3b,#065f46)', border:'1px solid #10b981', marginBottom:'20px'}}>
+                    <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'10px'}}>
+                      <div style={{display:'flex', alignItems:'center', gap:'12px'}}>
+                        <span style={{fontSize:'32px'}}>✅</span>
+                        <div>
+                          <div style={{color:'#6ee7b7', fontWeight:700, fontSize:'13px', textTransform:'uppercase', letterSpacing:'0.05em'}}>Last Distribution Received</div>
+                          <div style={{color:'#fff', fontSize:'20px', fontWeight:800, marginTop:'2px'}}>
+                            {last.rice > 0 && `🌾 Rice: ${last.rice} kg  `}
+                            {last.wheat > 0 && `🌾 Wheat: ${last.wheat} kg`}
+                          </div>
+                          <div style={{color:'#a7f3d0', fontSize:'13px', marginTop:'4px'}}>
+                            from {last.shopName || `Shop #${last.shop_id}`} &nbsp;•&nbsp;
+                            {new Date(last.date).toLocaleString('en-IN', {day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{textAlign:'right'}}>
+                        <div style={{color:'#6ee7b7', fontSize:'13px'}}>Total Received</div>
+                        <div style={{color:'#fff', fontSize:'22px', fontWeight:800}}>{totalReceived.rice + totalReceived.wheat} kg</div>
+                        <div style={{color:'#a7f3d0', fontSize:'12px'}}>{data.transactionHistory.length} collection(s)</div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
               <div className="content-grid">
                 <div className="card animate-in" style={{animationDelay: '80ms'}}>
                   <h3>🌾 Ration Entitlement (Monthly)</h3>
@@ -1072,7 +1153,7 @@ export function UserDashboard({ user, onLogout }) {
                     <div className="stat-card green">
                       <div className="stat-header"><div className="stat-icon">🌾</div> Rice Status</div>
                       <div className="stat-number">{riceRemaining} <span className="stat-unit">kg left</span></div>
-                      <div className="stat-sub">From {data.entitlement.rice} kg quota</div>
+                      <div className="stat-sub">Received: {totalReceived.rice} kg / {data.entitlement.rice} kg quota</div>
                       <div style={{background: 'rgba(255,255,255,0.2)', height: '6px', borderRadius: '3px', marginTop: '10px'}}>
                         <div style={{background: '#fff', height: '100%', borderRadius: '3px', width: `${data.entitlement.rice > 0 ? Math.min(((data.entitlement.rice - riceRemaining) / data.entitlement.rice) * 100, 100) : 0}%`}}></div>
                       </div>
@@ -1080,7 +1161,7 @@ export function UserDashboard({ user, onLogout }) {
                     <div className="stat-card orange">
                       <div className="stat-header"><div className="stat-icon">🌾</div> Wheat Status</div>
                       <div className="stat-number">{wheatRemaining} <span className="stat-unit">kg left</span></div>
-                      <div className="stat-sub">From {data.entitlement.wheat} kg quota</div>
+                      <div className="stat-sub">Received: {totalReceived.wheat} kg / {data.entitlement.wheat} kg quota</div>
                       <div style={{background: 'rgba(255,255,255,0.2)', height: '6px', borderRadius: '3px', marginTop: '10px'}}>
                         <div style={{background: '#fff', height: '100%', borderRadius: '3px', width: `${data.entitlement.wheat > 0 ? Math.min(((data.entitlement.wheat - wheatRemaining) / data.entitlement.wheat) * 100, 100) : 0}%`}}></div>
                       </div>
@@ -1103,9 +1184,17 @@ export function UserDashboard({ user, onLogout }) {
                        <span style={{color:'#64748b'}}>Card Type</span>
                        <span style={{fontWeight:'600'}}><span className={`category-badge ${data.user.rationCardType?.toLowerCase()}`}>{data.user.rationCardType}</span></span>
                      </div>
-                     <div style={{display: 'flex', justifyContent: 'space-between'}}>
+                     <div style={{display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #e2e8f0', paddingBottom: '8px'}}>
                        <span style={{color:'#64748b'}}>Family Size</span>
                        <span style={{fontWeight:'600'}}>{data.user.family_members} Members</span>
+                     </div>
+                     <div style={{display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #e2e8f0', paddingBottom: '8px'}}>
+                       <span style={{color:'#64748b'}}>Area</span>
+                       <span style={{fontWeight:'600'}}>{data.user.area || 'N/A'}</span>
+                     </div>
+                     <div style={{display: 'flex', justifyContent: 'space-between'}}>
+                       <span style={{color:'#64748b'}}>Assigned Store</span>
+                       <span style={{fontWeight:'600'}}>{data.user.shopName || (data.user.shop_id ? `#${data.user.shop_id}` : 'None')}</span>
                      </div>
                   </div>
                 </div>

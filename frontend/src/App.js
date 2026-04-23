@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { registerUser, loginUser, resetPassword, registerAdmin, registerShopkeeper, loginShopkeeper, getAvailableShops } from "./api";
+import { registerUser, loginUser, resetPassword, registerShopkeeper, loginShopkeeper, getAvailableShops } from "./api";
 import { AdminDashboard, ShopkeeperDashboard, UserDashboard } from "./Dashboards";
 
 function App() {
@@ -11,7 +11,7 @@ function App() {
     rationCardType: "AAY",
     family_members: "",
     mobile_number: "",
-    city: "",
+    area: "",
     shop_id: ""
   });
 
@@ -21,60 +21,37 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [availableShops, setAvailableShops] = useState([]);
 
-  // Load available shops when entering shopkeeper register mode
+  // Load available shops when entering shopkeeper register mode or user register mode
   useEffect(() => {
-    if (mode === 'shopkeeper-register') {
+    if (mode === 'shopkeeper-register' || mode === 'register') {
       getAvailableShops().then(setAvailableShops);
     }
   }, [mode]);
+
+  const uniqueLocations = [...new Set(availableShops.map(shop => shop.location).filter(Boolean))];
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
   const handleRegister = async () => {
-    if (!form.name || !form.aadhaar || !form.ration_card_number || !form.password || !form.family_members || !form.mobile_number || !form.city) {
-      return alert("All fields are required.");
+    if (!form.name || !form.aadhaar || !form.ration_card_number || !form.password || !form.family_members || !form.mobile_number || !form.area || !form.shop_id) {
+      return alert("All fields are required, including Store selection.");
     }
     if (form.aadhaar.length !== 12 || !/^\d+$/.test(form.aadhaar)) {
       return alert("Aadhaar must be exactly 12 digits.");
     }
     if (form.password.length < 6) {
       return alert("Password must be at least 6 characters.");
+    }
+    if (!form.mobile_number || form.mobile_number.length !== 10 || !/^\d+$/.test(form.mobile_number)) {
+      return alert("Enter a valid 10-digit mobile number");
     }
     setLoading(true);
     const res = await registerUser(form);
     setLoading(false);
     alert(res);
     if (res.includes("Successfully")) setMode("auth");
-  };
-
-  const handleAdminRegister = async () => {
-    if (!form.name || !form.aadhaar || !form.password) {
-      return alert("All fields are required.");
-    }
-    if (form.aadhaar.length !== 12 || !/^\d+$/.test(form.aadhaar)) {
-      return alert("Aadhaar must be exactly 12 digits.");
-    }
-    if (form.password.length < 6) {
-      return alert("Password must be at least 6 characters.");
-    }
-    setLoading(true);
-    const res = await registerAdmin({ name: form.name, aadhaar: form.aadhaar, password: form.password });
-
-    if (res.includes("Successfully")) {
-      const loginRes = await loginUser({ aadhaar: form.aadhaar, password: form.password });
-      setLoading(false);
-      if (loginRes.token && loginRes.user) {
-        setCurrentUser(loginRes.user);
-      } else {
-        alert("Registration successful! Please login with your credentials.");
-        setMode("auth");
-      }
-    } else {
-      setLoading(false);
-      alert(res);
-    }
   };
 
   const handleLogin = async () => {
@@ -159,7 +136,7 @@ function App() {
 
   // ---- RENDER DASHBOARDS ----
   if (currentUser) {
-    if (currentUser.role === 'admin') return <AdminDashboard onLogout={handleLogout} />;
+    if (currentUser.role === 'admin') return <AdminDashboard user={currentUser} onLogout={handleLogout} />;
     if (currentUser.role === 'shopkeeper') return <ShopkeeperDashboard user={currentUser} onLogout={handleLogout} shopId={currentUser.shop_id || 1} isAssistedMode={currentUser.isAssistedMode} />;
     if (currentUser.role === 'user') return <UserDashboard user={currentUser} onLogout={handleLogout} />;
   }
@@ -227,16 +204,6 @@ function App() {
               🤝 Assisted Mode 
             </button>
 
-            <div className="divider">
-              <span>Admin Access</span>
-            </div>
-            <button
-              className="btn btn-admin-highlight"
-              style={{ width: '100%', fontSize: '13px', padding: '12px' }}
-              onClick={() => setMode("admin-register")}
-            >
-              🛡️ Register as Admin
-            </button>
           </>
         )}
 
@@ -320,10 +287,21 @@ function App() {
             </div>
 
             <div className="input-group">
+              <span className="input-icon">📍</span>
+              <select name="area" className="input-field" onChange={handleChange} style={{ paddingLeft: '40px' }}>
+                <option value="">Select Area / Location (Optional)</option>
+                {uniqueLocations.map(loc => (
+                  <option key={loc} value={loc}>{loc}</option>
+                ))}
+              </select>
+            </div>
+            <div className="input-group">
               <span className="input-icon">🏪</span>
               <select name="shop_id" className="input-field" onChange={handleChange} style={{ paddingLeft: '40px' }}>
                 <option value="">Select a Shop (Optional)</option>
-                {availableShops.map(shop => (
+                {availableShops
+                  .filter(shop => !form.area || (shop.location && shop.location.toLowerCase() === form.area.toLowerCase().trim()))
+                  .map(shop => (
                   <option key={shop.id} value={shop.id}>
                     {shop.name} — {shop.location || 'No location'}
                   </option>
@@ -375,8 +353,26 @@ function App() {
               <input name="mobile_number" className="input-field" placeholder="Mobile Number" onChange={handleChange} />
             </div>
             <div className="input-group">
-              <span className="input-icon">🏙️</span>
-              <input name="city" className="input-field" placeholder="City" onChange={handleChange} />
+              <span className="input-icon">📍</span>
+              <select name="area" className="input-field" onChange={handleChange} style={{ paddingLeft: '40px' }}>
+                <option value="">Select Area / Location</option>
+                {uniqueLocations.map(loc => (
+                  <option key={loc} value={loc}>{loc}</option>
+                ))}
+              </select>
+            </div>
+            <div className="input-group">
+              <span className="input-icon">🏪</span>
+              <select name="shop_id" className="input-field" onChange={handleChange} style={{ paddingLeft: '40px' }}>
+                <option value="">Select a Ration Shop</option>
+                {availableShops
+                  .filter(shop => !form.area || (shop.location && shop.location.toLowerCase() === form.area.toLowerCase().trim()))
+                  .map(shop => (
+                  <option key={shop.id} value={shop.id}>
+                    {shop.name} — {shop.location || 'No location'}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="input-group">
               <span className="input-icon">🔒</span>
@@ -386,37 +382,6 @@ function App() {
             <div className="button-group">
               <button className="btn btn-primary" style={{ width: '100%' }} onClick={handleRegister} disabled={loading}>
                 {loading ? <span className="btn-spinner"></span> : 'Register'}
-              </button>
-            </div>
-
-            <p className="back-link" onClick={() => setMode("auth")}>
-              ← Back to Login
-            </p>
-          </>
-        )}
-
-        {/* ===== ADMIN REGISTER ===== */}
-        {mode === "admin-register" && (
-          <>
-            <h3 className="form-title">🛡️ Admin Registration</h3>
-            <p className="form-hint">After registration, you'll be taken directly to the Admin Dashboard.</p>
-
-            <div className="input-group">
-              <span className="input-icon">👤</span>
-              <input name="name" className="input-field" placeholder="Admin Full Name" onChange={handleChange} />
-            </div>
-            <div className="input-group">
-              <span className="input-icon">🆔</span>
-              <input name="aadhaar" className="input-field" placeholder="Aadhaar Number (12 digits)" onChange={handleChange} maxLength="12" />
-            </div>
-            <div className="input-group">
-              <span className="input-icon">🔒</span>
-              <input name="password" type="password" className="input-field" placeholder="Password (min 6 chars)" onChange={handleChange} />
-            </div>
-
-            <div className="button-group">
-              <button className="btn btn-primary" style={{ width: '100%' }} onClick={handleAdminRegister} disabled={loading}>
-                {loading ? <span className="btn-spinner"></span> : '🛡️ Register & Enter Dashboard'}
               </button>
             </div>
 

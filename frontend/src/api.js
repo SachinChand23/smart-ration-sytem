@@ -45,18 +45,6 @@ export const resetPassword = async (data) => {
   }
 };
 
-export const registerAdmin = async (data) => {
-  try {
-    const res = await fetch(`${BASE_URL}/users/register-admin`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data)
-    });
-    return await res.text();
-  } catch (err) {
-    return "Network error: Unable to reach the server.";
-  }
-};
 
 export const adminUpdateUser = async (id, data) => {
   try {
@@ -136,3 +124,22 @@ export const updateComplaintStatus = async (id, status) => {
   });
   return res.text();
 };
+
+// ===== ADMIN VERIFICATION API =====
+export const verifyUser = async (id) => {
+  try {
+    const res = await fetch(`${BASE_URL}/users/verify/${id}`, { method: "PUT" });
+    return await res.text();
+  } catch (err) {
+    return "Network error: Unable to reach the server.";
+  }
+};
+
+export const unverifyUser = async (id) => {
+  try {
+    const res = await fetch(`${BASE_URL}/users/unverify/${id}`, { method: "PUT" });
+    return await res.text();
+  } catch (err) {
+    return "Network error: Unable to reach the server.";
+  }
+};

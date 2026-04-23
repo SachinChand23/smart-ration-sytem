@@ -48,7 +48,7 @@ exports.getAdminDashboard = async (req, res) => {
 // GET ALL BENEFICIARIES
 exports.getAllBeneficiaries = async (req, res) => {
   try {
-    const users = await query("SELECT id, name, aadhaar, ration_card_number, rationCardType, family_members, mobile_number, city, is_verified FROM users WHERE role = 'user'");
+    const users = await query("SELECT id, name, aadhaar, ration_card_number, rationCardType, family_members, mobile_number, area, shop_id, is_verified FROM users WHERE role = 'user'");
     res.json(users);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -58,10 +58,10 @@ exports.getAllBeneficiaries = async (req, res) => {
 // UPDATE USER (ADMIN)
 exports.adminUpdateUser = async (req, res) => {
   const { id } = req.params;
-  const { name, aadhaar, ration_card_number, rationCardType, family_members, mobile_number, city } = req.body;
+  const { name, aadhaar, ration_card_number, rationCardType, family_members, mobile_number, area, shop_id } = req.body;
   try {
-    await query("UPDATE users SET name=?, aadhaar=?, ration_card_number=?, rationCardType=?, family_members=?, mobile_number=?, city=? WHERE id=? AND role='user'",
-      [name, aadhaar, ration_card_number, rationCardType, family_members, mobile_number, city, id]);
+    await query("UPDATE users SET name=?, aadhaar=?, ration_card_number=?, rationCardType=?, family_members=?, mobile_number=?, area=?, shop_id=? WHERE id=? AND role='user'",
+      [name, aadhaar, ration_card_number, rationCardType, family_members, mobile_number, area, shop_id, id]);
     res.json({ message: "User updated successfully" });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -138,7 +138,7 @@ exports.getShopkeeperDashboard = async (req, res) => {
 exports.getUserDashboard = async (req, res) => {
   const user_id = req.params.user_id;
   try {
-    const userRows = await query("SELECT * FROM users WHERE id = ?", [user_id]);
+    const userRows = await query("SELECT u.*, s.name as shopName FROM users u LEFT JOIN shops s ON u.shop_id = s.id WHERE u.id = ?", [user_id]);
     const user = userRows[0];
     if (!user) return res.status(404).send("User not found");
 
@@ -154,7 +154,7 @@ exports.getUserDashboard = async (req, res) => {
     const txHistory = await query("SELECT t.*, s.name as shopName FROM transactions t LEFT JOIN shops s ON t.shop_id = s.id WHERE user_id = ? ORDER BY date DESC", [user_id]);
 
     res.json({
-      user: { name: user.name, aadhaar: user.aadhaar, ration_card_number: user.ration_card_number, rationCardType: user.rationCardType, family_members: user.family_members },
+      user: { name: user.name, aadhaar: user.aadhaar, ration_card_number: user.ration_card_number, rationCardType: user.rationCardType, family_members: user.family_members, area: user.area, shopName: user.shopName },
       entitlement,
       transactionHistory: txHistory
     });
@@ -169,27 +169,104 @@ exports.searchUserByAadhaar = async (req, res) => {
   try {
     let rows;
     if (aadhaar) {
-      rows = await query("SELECT id, name, aadhaar, ration_card_number, rationCardType, family_members FROM users WHERE aadhaar = ?", [aadhaar]);
+      rows = await query("SELECT id, name, aadhaar, ration_card_number, rationCardType, family_members, area, shop_id FROM users WHERE aadhaar = ? AND role = 'user'", [aadhaar]);
     } else if (ration_card) {
-      rows = await query("SELECT id, name, aadhaar, ration_card_number, rationCardType, family_members FROM users WHERE ration_card_number = ?", [ration_card]);
+      rows = await query("SELECT id, name, aadhaar, ration_card_number, rationCardType, family_members, area, shop_id FROM users WHERE ration_card_number = ? AND role = 'user'", [ration_card]);
     } else {
       return res.status(400).send("Provide aadhaar or ration_card");
     }
     if (!rows[0]) return res.status(404).send("User not found");
-    res.json(rows[0]);
+    const user = rows[0];
+
+    // Check if user already received ration this month
+    const monthlyCheck = await query(
+      `SELECT SUM(rice) as rice_collected, SUM(wheat) as wheat_collected, COUNT(*) as times
+       FROM transactions
+       WHERE user_id = ? AND MONTH(date) = MONTH(CURDATE()) AND YEAR(date) = YEAR(CURDATE())`,
+      [user.id]
+    );
+    const monthly = monthlyCheck[0];
+    user.monthly_collected = monthly.times > 0;
+    user.rice_collected = monthly.rice_collected || 0;
+    user.wheat_collected = monthly.wheat_collected || 0;
+
+    // Calculate entitlement based on rationCardType
+    let entitlement = { rice: 0, wheat: 0 };
+    if (user.rationCardType === 'AAY') {
+      entitlement = { rice: 35, wheat: 0 };
+    } else if (user.rationCardType === 'PHH') {
+      entitlement = { rice: 5 * (user.family_members || 1), wheat: 2 * (user.family_members || 1) };
+    } else if (user.rationCardType === 'NPHH') {
+      entitlement = { rice: 2 * (user.family_members || 1), wheat: 1 * (user.family_members || 1) };
+    }
+    user.entitlement = entitlement;
+    user.rice_remaining = Math.max(0, entitlement.rice - user.rice_collected);
+    user.wheat_remaining = Math.max(0, entitlement.wheat - user.wheat_collected);
+
+    res.json(user);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
 
+
 // DISTRIBUTE RATION
 exports.distributeRation = async (req, res) => {
   const { user_id, shop_id, rice, wheat } = req.body;
   try {
-    await query("INSERT INTO transactions (user_id, shop_id, rice, wheat) VALUES (?, ?, ?, ?)", [user_id, shop_id, rice, wheat]);
-    await query("UPDATE stock SET rice = rice - ?, wheat = wheat - ? WHERE shop_id = ?", [rice, wheat, shop_id]);
-    res.send("Ration distributed successfully");
+    // 1. Check if user already received full ration this month
+    const [monthCheck] = await query(
+      `SELECT SUM(rice) as rice_got, SUM(wheat) as wheat_got FROM transactions
+       WHERE user_id = ? AND MONTH(date) = MONTH(CURDATE()) AND YEAR(date) = YEAR(CURDATE())`,
+      [user_id]
+    );
+
+    // 2. Get user entitlement
+    const userRows = await query("SELECT rationCardType, family_members FROM users WHERE id = ?", [user_id]);
+    if (!userRows[0]) return res.status(404).json({ error: "User not found" });
+    const { rationCardType, family_members } = userRows[0];
+    let maxRice = 0, maxWheat = 0;
+    if (rationCardType === 'AAY')       { maxRice = 35; maxWheat = 0; }
+    else if (rationCardType === 'PHH')  { maxRice = 5 * (family_members || 1); maxWheat = 2 * (family_members || 1); }
+    else if (rationCardType === 'NPHH') { maxRice = 2 * (family_members || 1); maxWheat = 1 * (family_members || 1); }
+
+    const riceGot = monthCheck.rice_got || 0;
+    const wheatGot = monthCheck.wheat_got || 0;
+    const riceAllowed = Math.max(0, maxRice - riceGot);
+    const wheatAllowed = Math.max(0, maxWheat - wheatGot);
+
+    if (riceAllowed === 0 && wheatAllowed === 0) {
+      return res.status(400).json({ error: `This beneficiary has already received their full monthly entitlement (${maxRice} kg rice, ${maxWheat} kg wheat).` });
+    }
+
+    // Cap requested amounts to what's still allowed
+    const riceToGive = Math.min(Number(rice) || 0, riceAllowed);
+    const wheatToGive = Math.min(Number(wheat) || 0, wheatAllowed);
+
+    if (riceToGive === 0 && wheatToGive === 0) {
+      return res.status(400).json({ error: "Nothing to distribute. Beneficiary's remaining entitlement is 0 for the selected items." });
+    }
+
+    // 3. Check shop has sufficient stock
+    const stockRows = await query("SELECT rice, wheat FROM stock WHERE shop_id = ?", [shop_id]);
+    const stock = stockRows[0] || { rice: 0, wheat: 0 };
+    if (riceToGive > stock.rice) {
+      return res.status(400).json({ error: `Insufficient rice in stock. Available: ${stock.rice} kg, Requested: ${riceToGive} kg.` });
+    }
+    if (wheatToGive > stock.wheat) {
+      return res.status(400).json({ error: `Insufficient wheat in stock. Available: ${stock.wheat} kg, Requested: ${wheatToGive} kg.` });
+    }
+
+    // 4. Record transaction and deduct stock
+    await query("INSERT INTO transactions (user_id, shop_id, rice, wheat) VALUES (?, ?, ?, ?)", [user_id, shop_id, riceToGive, wheatToGive]);
+    await query("UPDATE stock SET rice = rice - ?, wheat = wheat - ? WHERE shop_id = ?", [riceToGive, wheatToGive, shop_id]);
+
+    res.json({
+      message: `Ration distributed successfully ✅`,
+      distributed: { rice: riceToGive, wheat: wheatToGive }
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
+

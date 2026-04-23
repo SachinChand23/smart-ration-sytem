@@ -4,7 +4,7 @@ const jwt = require('jsonwebtoken');
 
 // REGISTER
 exports.registerUser = async (req, res) => {
-  const { name, aadhaar, ration_card_number, password, rationCardType, family_members, mobile_number, city } = req.body;
+  const { name, aadhaar, ration_card_number, password, rationCardType, family_members, mobile_number, area, shop_id } = req.body;
 
   // Validate Aadhaar (must be 12 digits)
   if (!aadhaar || aadhaar.length !== 12 || !/^\d+$/.test(aadhaar)) {
@@ -16,24 +16,33 @@ exports.registerUser = async (req, res) => {
     return res.status(400).send("Password must be at least 6 characters.");
   }
 
+  // Validate Mobile Number (must be 10 digits and numeric)
+  if (!mobile_number || mobile_number.length !== 10 || !/^\d+$/.test(mobile_number)) {
+    return res.status(400).send("Enter a valid 10-digit mobile number");
+  }
+
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
-    const role = "user"; // Default role
 
-    const query = `INSERT INTO users (name, aadhaar, password, role, ration_card_number, rationCardType, family_members, mobile_number, city)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+    const query = `INSERT INTO users (name, aadhaar, password, role, ration_card_number, rationCardType, family_members, mobile_number, area, shop_id, is_verified)
+                   VALUES (?, ?, ?, 'user', ?, ?, ?, ?, ?, ?, true)`;
 
-    db.query(query, [name, aadhaar, hashedPassword, role, ration_card_number, rationCardType, family_members, mobile_number, city], (err, result) => {
+    db.query(query, [name, aadhaar, hashedPassword, ration_card_number, rationCardType, family_members, mobile_number, area, shop_id], (err, result) => {
       if (err) {
         if (err.code === 'ER_DUP_ENTRY') {
           if (err.sqlMessage && err.sqlMessage.includes('ration_card_number')) {
             return res.status(400).send("Ration Card Number is already registered.");
           }
-          return res.status(400).send("Aadhaar is already registered.");
+          if (err.sqlMessage && err.sqlMessage.includes('aadhaar')) {
+            return res.status(400).send("Aadhaar is already registered.");
+          }
+          if (err.sqlMessage && err.sqlMessage.includes('mobile_number')) {
+            return res.status(400).send("This mobile number is already registered.");
+          }
+          return res.status(400).send("Duplicate entry detected.");
         }
         return res.status(500).send(err);
       }
-
       res.send("User Registered Successfully ✅");
     });
   } catch (err) {
@@ -41,38 +50,7 @@ exports.registerUser = async (req, res) => {
   }
 };
 
-// REGISTER ADMIN
-exports.registerAdmin = async (req, res) => {
-  const { name, aadhaar, password } = req.body;
 
-  if (!aadhaar || aadhaar.length !== 12 || !/^\d+$/.test(aadhaar)) {
-    return res.status(400).send("Aadhaar must be exactly 12 digits.");
-  }
-  if (!password || password.length < 6) {
-    return res.status(400).send("Password must be at least 6 characters.");
-  }
-  if (!name) {
-    return res.status(400).send("Name is required.");
-  }
-
-  try {
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    const query = `INSERT INTO users (name, aadhaar, password, role) VALUES (?, ?, ?, 'admin')`;
-
-    db.query(query, [name, aadhaar, hashedPassword], (err, result) => {
-      if (err) {
-        if (err.code === 'ER_DUP_ENTRY') {
-          return res.status(400).send("Aadhaar is already registered.");
-        }
-        return res.status(500).send(err);
-      }
-      res.send("Admin Registered Successfully ✅");
-    });
-  } catch (err) {
-    res.status(500).send(err);
-  }
-};
 
 // LOGIN
 exports.loginUser = (req, res) => {
@@ -95,13 +73,14 @@ exports.loginUser = (req, res) => {
       return res.status(401).json({ message: "Invalid password" });
     }
 
-    const token = jwt.sign({ id: user.id, role: user.role, name: user.name, aadhaar: user.aadhaar, rationCardType: user.rationCardType, shop_id: user.shop_id }, "secret123", {
+    const token = jwt.sign({ id: user.id, role: user.role, name: user.name, aadhaar: user.aadhaar, rationCardType: user.rationCardType, shop_id: user.shop_id, area: user.area }, "secret123", {
       expiresIn: "1h"
     });
 
-    res.json({ message: "Login successful", token, user: { id: user.id, name: user.name, role: user.role, aadhaar: user.aadhaar, shop_id: user.shop_id } });
+    res.json({ message: "Login successful", token, user: { id: user.id, name: user.name, role: user.role, aadhaar: user.aadhaar, shop_id: user.shop_id, area: user.area } });
   });
 };
+
 
 // GET USERS
 exports.getUsers = (req, res) => {
@@ -110,6 +89,27 @@ exports.getUsers = (req, res) => {
     res.json(result);
   });
 };
+
+// VERIFY USER (ADMIN)
+exports.verifyUser = (req, res) => {
+  const { id } = req.params;
+  db.query("UPDATE users SET is_verified = true WHERE id = ? AND role = 'user'", [id], (err, result) => {
+    if (err) return res.status(500).send(err);
+    if (result.affectedRows === 0) return res.status(404).send("User not found");
+    res.send("User verified successfully ✅");
+  });
+};
+
+// REJECT / UNVERIFY USER (ADMIN)
+exports.unverifyUser = (req, res) => {
+  const { id } = req.params;
+  db.query("UPDATE users SET is_verified = false WHERE id = ? AND role = 'user'", [id], (err, result) => {
+    if (err) return res.status(500).send(err);
+    if (result.affectedRows === 0) return res.status(404).send("User not found");
+    res.send("User unverified.");
+  });
+};
+
 
 // RESET PASSWORD
 exports.resetPassword = async (req, res) => {
