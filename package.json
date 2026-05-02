@@ -1,0 +1,11 @@
+{
+  "name": "ration-system",
+  "version": "1.0.0",
+  "description": "Smart Ration Distribution System",
+  "scripts": {
+    "start:backend": "npm start --prefix backend",
+    "start:frontend": "npm start --prefix frontend",
+    "start": "npm run start:backend & npm run start:frontend",
+    "install:all": "npm install --prefix backend && npm install --prefix frontend"
+  }
+}

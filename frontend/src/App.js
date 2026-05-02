@@ -1,24 +1,25 @@
 import { useState, useEffect } from "react";
-import { registerUser, loginUser, resetPassword, registerShopkeeper, loginShopkeeper, getAvailableShops } from "./api";
+import { registerUser, loginUser, resetPassword, registerShopkeeper, loginShopkeeper, getAvailableShops, sendUserOTP, sendShopkeeperOTP, verifyUserOTP, verifyShopkeeperOTP } from "./api";
 import { AdminDashboard, ShopkeeperDashboard, UserDashboard } from "./Dashboards";
 
 function App() {
   const [form, setForm] = useState({
-    name: "",
     aadhaar: "",
     ration_card_number: "",
+    shopkeeper_id: "",
     password: "",
-    rationCardType: "AAY",
-    family_members: "",
     mobile_number: "",
     area: "",
-    shop_id: ""
+    shop_id: "",
+    otp: ""
   });
 
   // modes: 'auth', 'register', 'forgot', 'admin-register', 'shopkeeper-login', 'shopkeeper-register'
   const [mode, setMode] = useState("auth");
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpVerified, setOtpVerified] = useState(false);
   const [availableShops, setAvailableShops] = useState([]);
 
   // Load available shops when entering shopkeeper register mode or user register mode
@@ -34,24 +35,83 @@ function App() {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
+  const handleRequestOTP = async () => {
+    if (!form.aadhaar || !form.ration_card_number) {
+      return alert("Aadhaar and Ration Card Number are required to request OTP.");
+    }
+    setLoading(true);
+    const res = await sendUserOTP({ aadhaar: form.aadhaar, ration_card_number: form.ration_card_number });
+    setLoading(false);
+    if (res.message.includes("successfully")) {
+      setOtpSent(true);
+      alert(res.message);
+      if (res.dev_otp) console.log("DEV OTP:", res.dev_otp);
+    } else {
+      alert(res.message || "Failed to send OTP.");
+    }
+  };
+
+  const handleShopkeeperRequestOTP = async () => {
+    if (!form.aadhaar || !form.shopkeeper_id) {
+      return alert("Aadhaar and Shopkeeper ID are required to request OTP.");
+    }
+    setLoading(true);
+    const res = await sendShopkeeperOTP({ aadhaar: form.aadhaar, shopkeeper_id: form.shopkeeper_id });
+    setLoading(false);
+    if (res.message.includes("successfully")) {
+      setOtpSent(true);
+      alert(res.message);
+      if (res.dev_otp) console.log("DEV OTP:", res.dev_otp);
+    } else {
+      alert(res.message || "Failed to send OTP.");
+    }
+  };
+
+  const handleVerifyOTP = async () => {
+    if (!form.otp || form.otp.length !== 6) {
+      return alert("Please enter a valid 6-digit OTP.");
+    }
+    setLoading(true);
+    const res = await verifyUserOTP({ aadhaar: form.aadhaar, otp: form.otp });
+    setLoading(false);
+    
+    if (res.includes("Successfully")) {
+      setOtpVerified(true);
+      alert(res);
+    } else {
+      alert(res);
+    }
+  };
+
+  const handleShopkeeperVerifyOTP = async () => {
+    if (!form.otp || form.otp.length !== 6) {
+      return alert("Please enter a valid 6-digit OTP.");
+    }
+    setLoading(true);
+    const res = await verifyShopkeeperOTP({ aadhaar: form.aadhaar, otp: form.otp });
+    setLoading(false);
+    
+    if (res.includes("Successfully")) {
+      setOtpVerified(true);
+      alert(res);
+    } else {
+      alert(res);
+    }
+  };
+
   const handleRegister = async () => {
-    if (!form.name || !form.aadhaar || !form.ration_card_number || !form.password || !form.family_members || !form.mobile_number || !form.area || !form.shop_id) {
-      return alert("All fields are required, including Store selection.");
-    }
-    if (form.aadhaar.length !== 12 || !/^\d+$/.test(form.aadhaar)) {
-      return alert("Aadhaar must be exactly 12 digits.");
-    }
-    if (form.password.length < 6) {
-      return alert("Password must be at least 6 characters.");
-    }
-    if (!form.mobile_number || form.mobile_number.length !== 10 || !/^\d+$/.test(form.mobile_number)) {
-      return alert("Enter a valid 10-digit mobile number");
+    if (!form.otp || !form.aadhaar || !form.ration_card_number || !form.password) {
+      return alert("All fields are required (Aadhaar, Ration Card, OTP, Password).");
     }
     setLoading(true);
     const res = await registerUser(form);
     setLoading(false);
     alert(res);
-    if (res.includes("Successfully")) setMode("auth");
+    if (res.includes("Successfully")) {
+      setMode("auth");
+      setOtpSent(false);
+      setOtpVerified(false);
+    }
   };
 
   const handleLogin = async () => {
@@ -91,21 +151,16 @@ function App() {
   };
 
   const handleShopkeeperRegister = async () => {
-    if (!form.name || !form.aadhaar || !form.password) {
-      return alert("All fields are required.");
-    }
-    if (form.aadhaar.length !== 12 || !/^\d+$/.test(form.aadhaar)) {
-      return alert("Aadhaar must be exactly 12 digits.");
-    }
-    if (form.password.length < 6) {
-      return alert("Password must be at least 6 characters.");
+    if (!form.otp || !form.shopkeeper_id || !form.aadhaar || !form.password) {
+      return alert("OTP, Shopkeeper ID, Aadhaar and Password are required.");
     }
     setLoading(true);
     const res = await registerShopkeeper({
-      name: form.name,
+      shopkeeper_id: form.shopkeeper_id,
       aadhaar: form.aadhaar,
       password: form.password,
-      shop_id: form.shop_id || null
+      shop_id: form.shop_id || null,
+      otp: form.otp
     });
 
     if (res.includes("Successfully")) {
@@ -116,6 +171,8 @@ function App() {
       } else {
         alert("Registration successful! Please login with your credentials.");
         setMode("shopkeeper-login");
+        setOtpSent(false);
+        setOtpVerified(false);
       }
     } else {
       setLoading(false);
@@ -132,7 +189,11 @@ function App() {
     if (res.includes("successfully")) setMode("auth");
   };
 
-  const handleLogout = () => setCurrentUser(null);
+  const handleLogout = () => {
+    setCurrentUser(null);
+    setOtpVerified(false);
+    setOtpSent(false);
+  };
 
   // ---- RENDER DASHBOARDS ----
   if (currentUser) {
@@ -163,11 +224,11 @@ function App() {
 
             <div className="input-group">
               <span className="input-icon">🆔</span>
-              <input name="aadhaar" className="input-field" placeholder="Aadhaar ID" onChange={handleChange} />
+              <input name="aadhaar" className="input-field" placeholder="Aadhaar ID" onChange={handleChange} autoComplete="off" />
             </div>
             <div className="input-group">
               <span className="input-icon">🔒</span>
-              <input name="password" type="password" className="input-field" placeholder="Password" onChange={handleChange} />
+              <input name="password" type="password" className="input-field" placeholder="Password" onChange={handleChange} autoComplete="new-password" />
             </div>
 
             <div className="button-group">
@@ -177,7 +238,7 @@ function App() {
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '18px' }}>
-              <p className="link-text" onClick={() => setMode("register")}>
+              <p className="link-text" onClick={() => { setMode("register"); setOtpSent(false); setOtpVerified(false); }}>
                 👤 User Register
               </p>
               <p className="link-text" onClick={() => setMode("forgot")}>
@@ -215,11 +276,11 @@ function App() {
 
             <div className="input-group">
               <span className="input-icon">🆔</span>
-              <input name="aadhaar" className="input-field" placeholder="Aadhaar ID" onChange={handleChange} />
+              <input name="aadhaar" className="input-field" placeholder="Aadhaar ID" onChange={handleChange} autoComplete="off" />
             </div>
             <div className="input-group">
               <span className="input-icon">🔒</span>
-              <input name="password" type="password" className="input-field" placeholder="Password" onChange={handleChange} />
+              <input name="password" type="password" className="input-field" placeholder="Password" onChange={handleChange} autoComplete="new-password" />
             </div>
 
             <div className="button-group">
@@ -248,11 +309,11 @@ function App() {
 
             <div className="input-group">
               <span className="input-icon">🆔</span>
-              <input name="aadhaar" className="input-field" placeholder="Shopkeeper Aadhaar ID" onChange={handleChange} />
+              <input name="aadhaar" className="input-field" placeholder="Shopkeeper Aadhaar ID" onChange={handleChange} autoComplete="off" />
             </div>
             <div className="input-group">
               <span className="input-icon">🔒</span>
-              <input name="password" type="password" className="input-field" placeholder="Password" onChange={handleChange} />
+              <input name="password" type="password" className="input-field" placeholder="Password" onChange={handleChange} autoComplete="new-password" />
             </div>
 
             <div className="button-group">
@@ -274,17 +335,50 @@ function App() {
             <p className="form-hint">Register as a shopkeeper and get assigned to a ration shop</p>
 
             <div className="input-group">
-              <span className="input-icon">👤</span>
-              <input name="name" className="input-field" placeholder="Full Name" onChange={handleChange} />
+              <span className="input-icon">🔑</span>
+              <input name="shopkeeper_id" className="input-field" placeholder="Authorized Shopkeeper ID" onChange={handleChange} autoComplete="off" disabled={otpSent} />
             </div>
             <div className="input-group">
               <span className="input-icon">🆔</span>
-              <input name="aadhaar" className="input-field" placeholder="Aadhaar Number (12 digits)" onChange={handleChange} maxLength="12" />
+              <input name="aadhaar" className="input-field" placeholder="Aadhaar Number (12 digits)" onChange={handleChange} maxLength="12" autoComplete="off" disabled={otpSent} />
             </div>
-            <div className="input-group">
-              <span className="input-icon">🔒</span>
-              <input name="password" type="password" className="input-field" placeholder="Password (min 6 chars)" onChange={handleChange} />
-            </div>
+
+            {!otpSent ? (
+              <button className="btn btn-shopkeeper-primary" style={{ width: '100%', marginBottom: '15px' }} onClick={handleShopkeeperRequestOTP} disabled={loading}>
+                {loading ? <span className="btn-spinner"></span> : 'Send OTP to Registered Mobile'}
+              </button>
+            ) : (
+              <>
+                <div className="input-group" style={{ border: otpVerified ? '2px solid #10b981' : '2px solid #fbbf24' }}>
+                  <span className="input-icon">📩</span>
+                  <input name="otp" className="input-field" placeholder="Enter 6-digit OTP" onChange={handleChange} maxLength="6" autoComplete="off" disabled={otpVerified} />
+                </div>
+                
+                {!otpVerified ? (
+                  <div className="button-group">
+                    <button className="btn btn-shopkeeper-primary" style={{ width: '100%' }} onClick={handleShopkeeperVerifyOTP} disabled={loading}>
+                      {loading ? <span className="btn-spinner"></span> : 'Verify OTP'}
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="input-group">
+                      <span className="input-icon">🔒</span>
+                      <input name="password" type="password" className="input-field" placeholder="Create Password" onChange={handleChange} autoComplete="new-password" />
+                    </div>
+                    <div className="button-group">
+                      <button className="btn btn-shopkeeper-primary" style={{ width: '100%' }} onClick={handleShopkeeperRegister} disabled={loading}>
+                        {loading ? <span className="btn-spinner"></span> : '🏪 Register & Save Details'}
+                      </button>
+                    </div>
+                  </>
+                )}
+                
+                <p className="link-text" style={{ textAlign: 'center', marginTop: '10px' }} onClick={() => { setOtpSent(false); setOtpVerified(false); }}>
+                  Wrong details? Edit credentials
+                </p>
+              </>
+            )}
 
             <div className="input-group">
               <span className="input-icon">📍</span>
@@ -310,7 +404,7 @@ function App() {
             </div>
 
             <div className="button-group">
-              <button className="btn btn-shopkeeper-primary" style={{ width: '100%' }} onClick={handleShopkeeperRegister} disabled={loading}>
+              <button className="btn btn-shopkeeper-primary" style={{ width: '100%' }} onClick={handleShopkeeperRegister} disabled={loading || !otpVerified}>
                 {loading ? <span className="btn-spinner"></span> : '🏪 Register & Enter Dashboard'}
               </button>
             </div>
@@ -327,63 +421,51 @@ function App() {
             <h3 className="form-title">User Registration</h3>
 
             <div className="input-group">
-              <span className="input-icon">👤</span>
-              <input name="name" className="input-field" placeholder="Full Name" onChange={handleChange} />
-            </div>
-            <div className="input-group">
               <span className="input-icon">🆔</span>
-              <input name="aadhaar" className="input-field" placeholder="Aadhaar Number (12 digits)" onChange={handleChange} maxLength="12" />
+              <input name="aadhaar" className="input-field" placeholder="Aadhaar Number" onChange={handleChange} maxLength="12" autoComplete="off" disabled={otpSent} />
             </div>
             <div className="input-group">
               <span className="input-icon">🪪</span>
-              <input name="ration_card_number" className="input-field" placeholder="Ration Card Number" onChange={handleChange} />
+              <input name="ration_card_number" className="input-field" placeholder="Ration Card Number" onChange={handleChange} autoComplete="off" disabled={otpSent} />
             </div>
 
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <select name="rationCardType" className="input-field" onChange={handleChange}>
-                <option value="AAY">AAY (Antyodaya Anna Yojana)</option>
-                <option value="PHH">PHH (Priority Household)</option>
-                <option value="NPHH">NPHH (Non-Priority / APL)</option>
-              </select>
-              <input name="family_members" type="number" className="input-field" placeholder="Family Size" onChange={handleChange} style={{ width: '130px' }} />
-            </div>
-
-            <div className="input-group">
-              <span className="input-icon">📱</span>
-              <input name="mobile_number" className="input-field" placeholder="Mobile Number" onChange={handleChange} />
-            </div>
-            <div className="input-group">
-              <span className="input-icon">📍</span>
-              <select name="area" className="input-field" onChange={handleChange} style={{ paddingLeft: '40px' }}>
-                <option value="">Select Area / Location</option>
-                {uniqueLocations.map(loc => (
-                  <option key={loc} value={loc}>{loc}</option>
-                ))}
-              </select>
-            </div>
-            <div className="input-group">
-              <span className="input-icon">🏪</span>
-              <select name="shop_id" className="input-field" onChange={handleChange} style={{ paddingLeft: '40px' }}>
-                <option value="">Select a Ration Shop</option>
-                {availableShops
-                  .filter(shop => !form.area || (shop.location && shop.location.toLowerCase() === form.area.toLowerCase().trim()))
-                  .map(shop => (
-                  <option key={shop.id} value={shop.id}>
-                    {shop.name} — {shop.location || 'No location'}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="input-group">
-              <span className="input-icon">🔒</span>
-              <input name="password" type="password" className="input-field" placeholder="Password (min 6 chars)" onChange={handleChange} />
-            </div>
-
-            <div className="button-group">
-              <button className="btn btn-primary" style={{ width: '100%' }} onClick={handleRegister} disabled={loading}>
-                {loading ? <span className="btn-spinner"></span> : 'Register'}
+            {!otpSent ? (
+              <button className="btn btn-primary" style={{ width: '100%', marginBottom: '15px' }} onClick={handleRequestOTP} disabled={loading}>
+                {loading ? <span className="btn-spinner"></span> : 'Verify & Send OTP'}
               </button>
-            </div>
+            ) : (
+              <>
+                <div className="input-group" style={{ border: otpVerified ? '2px solid #10b981' : '2px solid #3b82f6' }}>
+                  <span className="input-icon">📩</span>
+                  <input name="otp" className="input-field" placeholder="Enter 6-digit OTP" onChange={handleChange} maxLength="6" autoComplete="off" disabled={otpVerified} />
+                </div>
+
+                {!otpVerified ? (
+                  <div className="button-group">
+                    <button className="btn btn-primary" style={{ width: '100%' }} onClick={handleVerifyOTP} disabled={loading}>
+                      {loading ? <span className="btn-spinner"></span> : 'Verify OTP'}
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="input-group">
+                      <span className="input-icon">🔒</span>
+                      <input name="password" type="password" className="input-field" placeholder="Create Password" onChange={handleChange} autoComplete="new-password" />
+                    </div>
+
+                    <div className="button-group">
+                      <button className="btn btn-primary" style={{ width: '100%' }} onClick={handleRegister} disabled={loading}>
+                        {loading ? <span className="btn-spinner"></span> : 'Register My Details'}
+                      </button>
+                    </div>
+                  </>
+                )}
+                
+                <p className="link-text" style={{ textAlign: 'center', marginTop: '10px' }} onClick={() => { setOtpSent(false); setOtpVerified(false); }}>
+                  Edit Aadhaar / Ration Card
+                </p>
+              </>
+            )}
 
             <p className="back-link" onClick={() => setMode("auth")}>
               ← Back to Login
@@ -398,11 +480,11 @@ function App() {
 
             <div className="input-group">
               <span className="input-icon">🆔</span>
-              <input name="aadhaar" className="input-field" placeholder="Aadhaar ID" onChange={handleChange} />
+              <input name="aadhaar" className="input-field" placeholder="Aadhaar ID" onChange={handleChange} autoComplete="off" />
             </div>
             <div className="input-group">
               <span className="input-icon">🔒</span>
-              <input name="password" type="password" className="input-field" placeholder="New Password" onChange={handleChange} />
+              <input name="password" type="password" className="input-field" placeholder="New Password" onChange={handleChange} autoComplete="new-password" />
             </div>
 
             <div className="button-group">

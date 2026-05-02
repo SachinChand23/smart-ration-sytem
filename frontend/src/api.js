@@ -13,6 +13,32 @@ export const registerUser = async (data) => {
   }
 };
 
+export const sendUserOTP = async (data) => {
+  try {
+    const res = await fetch(`${BASE_URL}/users/send-otp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data)
+    });
+    return await res.json();
+  } catch (err) {
+    return { message: "Network error: Unable to reach the server." };
+  }
+};
+
+export const verifyUserOTP = async (data) => {
+  try {
+    const res = await fetch(`${BASE_URL}/users/verify-otp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data)
+    });
+    return await res.text();
+  } catch (err) {
+    return "Network error: Unable to reach the server.";
+  }
+};
+
 export const loginUser = async (data) => {
   try {
     const res = await fetch(`${BASE_URL}/users/login`, {
@@ -63,6 +89,32 @@ export const adminUpdateUser = async (id, data) => {
 export const registerShopkeeper = async (data) => {
   try {
     const res = await fetch(`${BASE_URL}/shopkeeper/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data)
+    });
+    return await res.text();
+  } catch (err) {
+    return "Network error: Unable to reach the server.";
+  }
+};
+
+export const sendShopkeeperOTP = async (data) => {
+  try {
+    const res = await fetch(`${BASE_URL}/shopkeeper/send-otp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data)
+    });
+    return await res.json();
+  } catch (err) {
+    return { message: "Network error: Unable to reach the server." };
+  }
+};
+
+export const verifyShopkeeperOTP = async (data) => {
+  try {
+    const res = await fetch(`${BASE_URL}/shopkeeper/verify-otp`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data)
